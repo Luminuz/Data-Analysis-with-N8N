@@ -1,5 +1,7 @@
 # Marketing KPI Analysis with n8n + AI
 
+Data is randomly generated and located at the link: https://docs.google.com/spreadsheets/d/1kK2VIHIZH5nR_jKC0mhBq3uNQdiKJPAo4UFPBS60y4o/edit?usp=sharing.
+Sheet 'campaigns' contains original data; sheet 'campaigns_analyst' contains n8n workflow output.
 An n8n workflow that reads campaign data from Google Sheets, calculates key marketing KPIs, saves them to a new sheet tab, and uses an AI agent to write an analysis with budget recommendations. Every run commits the AI report to the `reports/` folder of this repository.
 
 ## How it works
