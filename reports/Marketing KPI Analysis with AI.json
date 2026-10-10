@@ -1,0 +1,490 @@
+{
+  "name": "Marketing KPI Analysis with AI",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "95b299b7-c506-47b2-9f2e-07028961dc2d",
+      "name": "Run Analysis",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1kK2VIHIZH5nR_jKC0mhBq3uNQdiKJPAo4UFPBS60y4o",
+          "cachedResultName": "Dane_marketingowe"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1817096525",
+          "cachedResultName": "campaigns"
+        },
+        "options": {}
+      },
+      "id": "f49850f0-eb00-4a9f-94e6-e4cc49509cf5",
+      "name": "Read Marketing Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        112
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cBlf78ZD7ij0F0aE",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const num = (v) => {\n  if (v === null || v === undefined || v === '') return 0;\n  const n = Number(String(v).replace(/\\s/g, '').replace(',', '.'));\n  return isNaN(n) ? 0 : n;\n};\nconst r2 = (n) => (n === null ? null : Math.round(n * 100) / 100);\nconst div = (a, b) => (b ? a / b : null);\n\nconst kpis = (t) => ({\n  ctr_pct: r2(div(t.clicks, t.impressions) === null ? null : div(t.clicks, t.impressions) * 100),\n  cpc_pln: r2(div(t.spend, t.clicks)),\n  cpa_pln: r2(div(t.spend, t.conversions)),\n  roas: r2(div(t.revenue, t.spend)),\n  conversion_rate_pct: r2(div(t.conversions, t.clicks) === null ? null : div(t.conversions, t.clicks) * 100),\n});\n\nconst empty = () => ({ impressions: 0, clicks: 0, conversions: 0, spend: 0, revenue: 0 });\nconst add = (t, r) => {\n  t.impressions += r.impressions; t.clicks += r.clicks; t.conversions += r.conversions;\n  t.spend += r.spend; t.revenue += r.revenue;\n};\n\nconst campaigns = [];\nconst total = empty();\nconst byChannel = {};\n\nfor (const item of $input.all()) {\n  const j = item.json;\n  if (!j.campaign) continue;\n  const r = {\n    impressions: num(j.impressions),\n    clicks: num(j.clicks),\n    conversions: num(j.conversions),\n    spend: num(j.spend_pln),\n    revenue: num(j.revenue_pln),\n  };\n  add(total, r);\n  const ch = j.channel || 'Unknown';\n  if (!byChannel[ch]) byChannel[ch] = empty();\n  add(byChannel[ch], r);\n  campaigns.push({\n    campaign: j.campaign,\n    channel: ch,\n    campaign_type: j.campaign_type,\n    date: j.date,\n    impressions: r.impressions,\n    clicks: r.clicks,\n    conversions: r.conversions,\n    spend_pln: r2(r.spend),\n    revenue_pln: r2(r.revenue),\n    ...kpis(r),\n  });\n}\n\nconst channels = Object.entries(byChannel).map(([channel, t]) => ({\n  channel,\n  impressions: t.impressions,\n  clicks: t.clicks,\n  conversions: t.conversions,\n  spend_pln: r2(t.spend),\n  revenue_pln: r2(t.revenue),\n  ...kpis(t),\n}));\n\nreturn [{\n  json: {\n    totals: {\n      impressions: total.impressions,\n      clicks: total.clicks,\n      conversions: total.conversions,\n      spend_pln: r2(total.spend),\n      revenue_pln: r2(total.revenue),\n      ...kpis(total),\n    },\n    channels,\n    campaigns,\n  },\n}];"
+      },
+      "id": "872f8d9a-f8b6-4345-892e-7117bbde204b",
+      "name": "Calculate KPIs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Here are the marketing KPIs calculated from the campaign sheet (currency: PLN).\n\nTOTALS:\n{{ JSON.stringify($json.totals, null, 2) }}\n\nBY CHANNEL:\n{{ JSON.stringify($json.channels, null, 2) }}\n\nBY CAMPAIGN:\n{{ JSON.stringify($json.campaigns, null, 2) }}\n\nWrite the analysis report.",
+        "options": {
+          "systemMessage": "You are a senior performance marketing analyst. The KPIs are already calculated - do not recalculate them, use the numbers as given:\n- CTR = clicks / impressions x 100\n- CPC = spend / clicks\n- CPA = spend / conversions\n- ROAS = revenue / spend\n- Conversion rate = conversions / clicks x 100\n\nWrite a clear report in Markdown with these sections:\n1. Overall summary - a table with total CTR, CPC, CPA, ROAS, Conversion rate, spend and revenue.\n2. Channel performance - a table with the KPIs per channel, ranked by ROAS.\n3. Top 3 campaigns and Bottom 3 campaigns (by ROAS, mention CPA) with a short reason.\n4. Key insights - 3-5 bullet points (anomalies, wasted spend, strong performers).\n5. Recommendations - concrete budget reallocation and optimisation actions.\nBe concise and data-driven."
+        }
+      },
+      "id": "fc64358b-d3c2-4a6d-b9f9-dfbd293f5a2a",
+      "name": "AI Marketing Analyst",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        672,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "4ede58b3-efa7-4545-8b49-b79396c44b79",
+      "name": "OpenAI Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        752,
+        336
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Luminuz"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Data-Analysis-with-N8N"
+        },
+        "filePath": "=reports/marketing-report-{{ $now.toFormat(\"yyyy-MM-dd_HH-mm\") }}.md",
+        "fileContent": "={{ $json.output }}",
+        "commitMessage": "=Add marketing KPI report {{ $now.toFormat(\"yyyy-MM-dd HH:mm\") }}"
+      },
+      "id": "f45b3b19-22b1-449c-a6af-bc189f38c4a3",
+      "name": "Commit AI Report",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        1280,
+        80
+      ],
+      "webhookId": "b3439683-c82f-4d27-ae58-1a61fe967962",
+      "credentials": {
+        "githubApi": {
+          "id": "flaDPcTuGcsE43Fy",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Luminuz"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Data-Analysis-with-N8N"
+        },
+        "filePath": "README.md",
+        "fileContent": "# Marketing KPI Analysis with n8n + AI\n\nAn n8n workflow that reads campaign data from Google Sheets, calculates key marketing KPIs, saves them to a new sheet tab, and uses an AI agent to write an analysis with budget recommendations. Every run commits the AI report to the `reports/` folder of this repository.\n\n## How it works\n1. **Read Marketing Data** - loads campaign data from Google Sheets (impressions, clicks, conversions, spend, revenue)\n2. **Calculate KPIs** - computes metrics overall, per channel and per campaign\n3. **Save to campaigns_analyst tab** - writes every campaign with its KPIs back to the sheet\n4. **AI Marketing Analyst** - an AI agent (gpt-5-mini) interprets the results and recommends where to move budget\n5. **Commit to GitHub** - the report is saved as `reports/marketing-report-<date>.md`\n\n## KPIs\n| Metric | Formula |\n|---|---|\n| CTR | clicks / impressions x 100 |\n| CPC | spend / clicks |\n| CPA | spend / conversions |\n| ROAS | revenue / spend |\n| Conversion rate | conversions / clicks x 100 |\n\n## Results (sample data, 30 campaigns)\n- Spend: **11,525 PLN** -> Revenue: **131,300 PLN**\n- CTR **8.36%**, CPC **0.79 PLN**, CPA **10.22 PLN**, ROAS **11.39**, CR **7.7%**\n- Best channels by ROAS: Email (56.7), Organic (35.7), Meta (13.0)\n- Weakest campaigns: Google Display - Prospecting (ROAS 1.46), LinkedIn - Traffic (ROAS 1.82), YouTube - Awareness (ROAS 2.09)\n- AI recommendation: pause the weakest campaigns and move ~1,844 PLN to top-performing channels\n\nSee the full AI-generated reports in [reports/](reports/).\n\n## Run it yourself\n1. Import the workflow JSON into n8n\n2. Connect your Google Sheets, OpenAI and GitHub credentials\n3. Point the Google Sheets nodes to your sheet (columns: campaign, channel, campaign_type, date, impressions, clicks, conversions, spend_pln, revenue_pln)\n4. Click **Execute workflow**\n\n## Tech\nn8n - Google Sheets - OpenAI - GitHub - JavaScript\n",
+        "commitMessage": "Add project README"
+      },
+      "id": "96cd4de5-6000-40ea-b7fc-5ad092526ceb",
+      "name": "Create README",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        1504,
+        80
+      ],
+      "executeOnce": true,
+      "webhookId": "019417b8-6cc1-409a-860f-efbcfc3b6bce",
+      "credentials": {
+        "githubApi": {
+          "id": "flaDPcTuGcsE43Fy",
+          "name": "GitHub account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1kK2VIHIZH5nR_jKC0mhBq3uNQdiKJPAo4UFPBS60y4o",
+          "cachedResultName": "Dane_marketingowe"
+        },
+        "title": "campaigns_analyst",
+        "options": {}
+      },
+      "id": "e38d6492-30da-4050-8258-68f37d18070d",
+      "name": "Create campaigns_analyst Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        752,
+        528
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cBlf78ZD7ij0F0aE",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1kK2VIHIZH5nR_jKC0mhBq3uNQdiKJPAo4UFPBS60y4o",
+          "cachedResultName": "Dane_marketingowe"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "campaigns_analyst"
+        }
+      },
+      "id": "ed76488b-d5ac-4622-8069-6545e7ff6397",
+      "name": "Clear campaigns_analyst Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        976,
+        384
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cBlf78ZD7ij0F0aE",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const campaigns = $('Calculate KPIs').first().json.campaigns || [];\nreturn campaigns.map((c) => ({ json: c }));"
+      },
+      "id": "83e77798-0c46-4536-9a3c-6b4f7673f6f8",
+      "name": "Prepare Campaign Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1kK2VIHIZH5nR_jKC0mhBq3uNQdiKJPAo4UFPBS60y4o",
+          "cachedResultName": "Dane_marketingowe"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "campaigns_analysis",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "443fce85-80bf-47af-81b4-1ec9c877e6c3",
+      "name": "Save to campaigns_analysis",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1424,
+        384
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cBlf78ZD7ij0F0aE",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Luminuz"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Data-Analysis-with-N8N"
+        },
+        "filePath": "README.md",
+        "fileContent": "# Marketing KPI Analysis with n8n + AI\n\nAn n8n workflow that reads campaign data from Google Sheets, calculates key marketing KPIs, saves them to a new sheet tab, and uses an AI agent to write an analysis with budget recommendations. Every run commits the AI report to the `reports/` folder of this repository.\n\n## How it works\n1. **Read Marketing Data** - loads campaign data from Google Sheets (impressions, clicks, conversions, spend, revenue)\n2. **Calculate KPIs** - computes metrics overall, per channel and per campaign\n3. **Save to campaigns_analyst tab** - writes every campaign with its KPIs back to the sheet\n4. **AI Marketing Analyst** - an AI agent (gpt-5-mini) interprets the results and recommends where to move budget\n5. **Commit to GitHub** - the report is saved as `reports/marketing-report-<date>.md`\n\n## KPIs\n| Metric | Formula |\n|---|---|\n| CTR | clicks / impressions x 100 |\n| CPC | spend / clicks |\n| CPA | spend / conversions |\n| ROAS | revenue / spend |\n| Conversion rate | conversions / clicks x 100 |\n\n## Results (sample data, 30 campaigns)\n- Spend: **11,525 PLN** -> Revenue: **131,300 PLN**\n- CTR **8.36%**, CPC **0.79 PLN**, CPA **10.22 PLN**, ROAS **11.39**, CR **7.7%**\n- Best channels by ROAS: Email (56.7), Organic (35.7), Meta (13.0)\n- Weakest campaigns: Google Display - Prospecting (ROAS 1.46), LinkedIn - Traffic (ROAS 1.82), YouTube - Awareness (ROAS 2.09)\n- AI recommendation: pause the weakest campaigns and move ~1,844 PLN to top-performing channels\n\nSee the full AI-generated reports in [reports/](reports/).\n\n## Run it yourself\n1. Import the workflow JSON into n8n\n2. Connect your Google Sheets, OpenAI and GitHub credentials\n3. Point the Google Sheets nodes to your sheet (columns: campaign, channel, campaign_type, date, impressions, clicks, conversions, spend_pln, revenue_pln)\n4. Click **Execute workflow**\n\n## Tech\nn8n - Google Sheets - OpenAI - GitHub - JavaScript\n",
+        "commitMessage": "Update project README"
+      },
+      "id": "e3cb870d-8566-442f-9528-9b77f1d74ad6",
+      "name": "Update Existing README",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        1728,
+        80
+      ],
+      "executeOnce": true,
+      "webhookId": "0ed5725d-dc76-4642-b7b4-da34bc78cb19",
+      "credentials": {
+        "githubApi": {
+          "id": "flaDPcTuGcsE43Fy",
+          "name": "GitHub account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run Analysis": {
+      "main": [
+        [
+          {
+            "node": "Read Marketing Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Marketing Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate KPIs": {
+      "main": [
+        [
+          {
+            "node": "AI Marketing Analyst",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create campaigns_analyst Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Marketing Analyst": {
+      "main": [
+        [
+          {
+            "node": "Commit AI Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Marketing Analyst",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Commit AI Report": {
+      "main": [
+        [
+          {
+            "node": "Create README",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create README": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Update Existing README",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create campaigns_analyst Tab": {
+      "main": [
+        [
+          {
+            "node": "Clear campaigns_analyst Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear campaigns_analyst Tab": {
+      "main": [
+        [
+          {
+            "node": "Prepare Campaign Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Campaign Rows": {
+      "main": [
+        [
+          {
+            "node": "Save to campaigns_analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2b77c3db-a860-4566-97f5-b50af65c224a",
+  "meta": {
+    "instanceId": "4ea0e40f8236e1b1420e5b116cb2a049328ab80499ea374f2a26c6840be43e59"
+  },
+  "nodeGroups": [
+    {
+      "id": "91deb456-c0ad-4cb2-a8dc-c413b83a7148",
+      "name": "Calculate campaign KPIs",
+      "nodeIds": [
+        "f49850f0-eb00-4a9f-94e6-e4cc49509cf5",
+        "872f8d9a-f8b6-4345-892e-7117bbde204b"
+      ],
+      "description": "Reads the campaigns tab and computes CTR, CPC, CPA, ROAS and conversion rate overall, per channel and per campaign"
+    },
+    {
+      "id": "d0cb4910-c92e-4f9a-91f0-33aec4730c8f",
+      "name": "Write AI report",
+      "nodeIds": [
+        "fc64358b-d3c2-4a6d-b9f9-dfbd293f5a2a",
+        "4ede58b3-efa7-4545-8b49-b79396c44b79"
+      ],
+      "description": "Turns the KPIs into a ranked report with top and bottom campaigns, insights and budget recommendations"
+    },
+    {
+      "id": "335c3f66-1f3f-4127-8be4-76abc66ad853",
+      "name": "Save campaign KPIs",
+      "nodeIds": [
+        "e38d6492-30da-4050-8258-68f37d18070d",
+        "ed76488b-d5ac-4622-8069-6545e7ff6397",
+        "83e77798-0c46-4536-9a3c-6b4f7673f6f8",
+        "443fce85-80bf-47af-81b4-1ec9c877e6c3"
+      ],
+      "description": "Creates the campaigns_analyst tab if missing, wipes it, then writes one row of KPIs per campaign"
+    },
+    {
+      "id": "838400d3-9ebe-4a6f-945a-2dc51db54351",
+      "name": "Publish to GitHub",
+      "nodeIds": [
+        "f45b3b19-22b1-449c-a6af-bc189f38c4a3",
+        "96cd4de5-6000-40ea-b7fc-5ad092526ceb",
+        "e3cb870d-8566-442f-9528-9b77f1d74ad6"
+      ],
+      "description": "Each run adds a dated report file to the repo and creates or refreshes the project README"
+    }
+  ],
+  "id": "Jz2sg0VLrsH9J4TR",
+  "tags": []
+}
